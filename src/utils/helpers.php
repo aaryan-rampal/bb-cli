@@ -31,7 +31,7 @@ if (!function_exists('getRepoPath')) {
             $projectUrl = $GLOBALS['bb_cli_project_url'];
 
             // If it's just owner/repo format (no URL), return as-is
-            if (preg_match('#^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$#', $projectUrl)) {
+            if (preg_match('#^[a-zA-Z0-9_][a-zA-Z0-9_.-]*[a-zA-Z0-9_]/[a-zA-Z0-9_][a-zA-Z0-9_.-]*[a-zA-Z0-9_]$#', $projectUrl)) {
                 return $projectUrl;
             }
 
