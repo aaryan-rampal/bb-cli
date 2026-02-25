@@ -351,6 +351,10 @@ class Pr extends Base
             throw new \Exception('Invalid limit. Usage: bb pr show <pr_id> [limit] [unresolved]');
         }
 
+        if (is_string($unresolved)) {
+            $unresolved = filter_var($unresolved, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        }
+
         if (!is_bool($unresolved)) {
             throw new \Exception('Invalid unresolved value. Usage: bb pr show <pr_id> [limit] [unresolved]');
         }
@@ -426,7 +430,9 @@ class Pr extends Base
             "/pullrequests/{$prId}/comments?pagelen={$limit}"
         );
 
-        return $response['values'] ?? [];
+        return array_values(array_filter($response['values'] ?? [], function($comment) {
+            return empty(array_get($comment, 'inline.path'));
+        }));
     }
 
     /**
@@ -488,16 +494,16 @@ class Pr extends Base
     {
         $response = $this->makeRequest(
             'GET',
-            "/pullrequests/{$prId}/activities?pagelen={$limit}"
+            "/pullrequests/{$prId}/comments?pagelen={$limit}"
         );
 
-        // Filter activities that are inline comments
+        // Filter comments that are inline comments
         $inlineComments = [];
-        foreach ($response['values'] ?? [] as $activity) {
-            if (array_get($activity, 'comment.type') === 'pullrequest_comment' &&
-                isset($activity['comment']['inline']) &&
-                !empty(array_get($activity, 'comment.content.raw', ''))) {
-                $inlineComments[] = $activity['comment'];
+        foreach ($response['values'] ?? [] as $comment) {
+            if (array_get($comment, 'type') === 'pullrequest_comment' &&
+                !empty(array_get($comment, 'inline.path')) &&
+                !empty(array_get($comment, 'content.raw', ''))) {
+                $inlineComments[] = $comment;
             }
         }
 
@@ -513,12 +519,17 @@ class Pr extends Base
      */
     private function formatInlineComment($comment, $activity = null)
     {
+        $line = array_get($comment, 'inline.to');
+        if (is_null($line)) {
+            $line = array_get($comment, 'inline.from');
+        }
+
         return [
             'author' => array_get($comment, 'user.display_name'),
             'timestamp' => $this->formatTimestamp(array_get($comment, 'created_on')),
             'content' => array_get($comment, 'content.raw', ''),
-            'file' => array_get($comment, 'inline.to.src.path'),
-            'line' => array_get($comment, 'inline.to.line'),
+            'file' => array_get($comment, 'inline.path', ''),
+            'line' => $line,
         ];
     }
 }
