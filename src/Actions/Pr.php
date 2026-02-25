@@ -377,10 +377,10 @@ class Pr extends Base
 
         // Filter by unresolved status if requested
         if ($unresolved) {
-            $comments = array_values(array_filter($comments, function($c) {
+            $comments = array_values(array_filter($comments, function ($c) {
                 return !(array_get($c, 'resolved') ?? false);
             }));
-            $inlineComments = array_values(array_filter($inlineComments, function($c) {
+            $inlineComments = array_values(array_filter($inlineComments, function ($c) {
                 return !(array_get($c, 'resolved') ?? false);
             }));
         }
@@ -430,7 +430,7 @@ class Pr extends Base
             "/pullrequests/{$prId}/comments?pagelen={$limit}"
         );
 
-        return array_values(array_filter($response['values'] ?? [], function($comment) {
+        return array_values(array_filter($response['values'] ?? [], function ($comment) {
             return empty(array_get($comment, 'inline.path'));
         }));
     }
