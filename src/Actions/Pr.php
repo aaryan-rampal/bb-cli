@@ -514,10 +514,9 @@ class Pr extends Base
      * Format an inline comment for display.
      *
      * @param array $comment
-     * @param array $activity
      * @return array
      */
-    private function formatInlineComment($comment, $activity = null)
+    private function formatInlineComment($comment)
     {
         $line = array_get($comment, 'inline.to');
         if (is_null($line)) {
