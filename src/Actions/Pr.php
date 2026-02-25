@@ -32,6 +32,7 @@ class Pr extends Base
         'decline' => 'decline',
         'merge' => 'merge, m',
         'create' => 'create',
+        'show' => 'show',
     ];
 
     /**
@@ -330,5 +331,194 @@ class Pr extends Base
         );
 
         return array_get($response, 'uuid');
+    }
+
+    /**
+     * List pull request general and inline comments.
+     *
+     * @param int $prId
+     * @param int $limit
+     * @param bool $unresolved
+     * @return void
+     */
+    public function show($prId = null, $limit = 10, $unresolved = false)
+    {
+        if (is_null($prId)) {
+            throw new \Exception('PR ID required. Usage: bb pr show <pr_id> [limit] [unresolved]');
+        }
+
+        if (!is_numeric($limit) || $limit < 1 || $limit > 100) {
+            throw new \Exception('Invalid limit. Usage: bb pr show <pr_id> [limit] [unresolved]');
+        }
+
+        if (!is_bool($unresolved)) {
+            throw new \Exception('Invalid unresolved value. Usage: bb pr show <pr_id> [limit] [unresolved]');
+        }
+
+        $this->displayComments($prId, (int)$limit, $unresolved);
+    }
+
+    /**
+     * Display pull request comments.
+     *
+     * @param int $prId
+     * @param int $limit
+     * @param bool $unresolved
+     * @return void
+     */
+    private function displayComments($prId, $limit, $unresolved)
+    {
+        $comments = $this->fetchComments($prId, $limit);
+        $inlineComments = $this->fetchInlineComments($prId, $limit);
+
+        // Filter by unresolved status if requested
+        if ($unresolved) {
+            $comments = array_values(array_filter($comments, function($c) {
+                return !(array_get($c, 'resolved') ?? false);
+            }));
+            $inlineComments = array_values(array_filter($inlineComments, function($c) {
+                return !(array_get($c, 'resolved') ?? false);
+            }));
+        }
+
+        o("## Pull Request Comments (PR #{$prId})", 'green');
+        o('');
+
+        // General comments section
+        o("### General Comments", 'yellow');
+        if (empty($comments)) {
+            o('No general comments found.', 'cyan');
+        } else {
+            foreach ($comments as $comment) {
+                $formatted = $this->formatGeneralComment($comment);
+                o("{$formatted['author']} ({$formatted['timestamp']}):", 'green');
+                o($formatted['content']);
+                o('');
+            }
+        }
+
+        // Inline comments section
+        o("### Inline Code Comments", 'yellow');
+        if (empty($inlineComments)) {
+            o('No inline comments found.', 'cyan');
+        } else {
+            foreach ($inlineComments as $comment) {
+                $formatted = $this->formatInlineComment($comment);
+                o("File: {$formatted['file']}:{$formatted['line']}", 'cyan');
+                o("{$formatted['author']} ({$formatted['timestamp']}):", 'green');
+                o($formatted['content']);
+                o('');
+            }
+        }
+    }
+
+    /**
+     * Fetch comments for a pull request.
+     *
+     * @param int $prId
+     * @param int $limit
+     * @return array
+     */
+    private function fetchComments($prId, $limit)
+    {
+        $response = $this->makeRequest(
+            'GET',
+            "/pullrequests/{$prId}/comments?pagelen={$limit}"
+        );
+
+        return $response['values'] ?? [];
+    }
+
+    /**
+     * Format a general comment for display.
+     *
+     * @param array $comment
+     * @return array
+     */
+    private function formatGeneralComment($comment)
+    {
+        if (array_get($comment, 'deleted')) {
+            return [
+                'author' => array_get($comment, 'user.display_name', 'Unknown'),
+                'timestamp' => $this->formatTimestamp(array_get($comment, 'created_on')),
+                'content' => '[DELETED]',
+                'uuid' => array_get($comment, 'user.uuid'),
+            ];
+        }
+
+        return [
+            'author' => array_get($comment, 'user.display_name'),
+            'timestamp' => $this->formatTimestamp(array_get($comment, 'created_on')),
+            'content' => array_get($comment, 'content.raw', ''),
+            'uuid' => array_get($comment, 'user.uuid'),
+        ];
+    }
+
+    /**
+     * Format timestamp as relative time.
+     *
+     * @param string $dateString
+     * @return string
+     */
+    private function formatTimestamp($dateString)
+    {
+        $date = new \DateTime($dateString);
+        $now = new \DateTime();
+        $diff = $now->diff($date);
+
+        if ($diff->d > 7) {
+            return $date->format('M d, Y');
+        } elseif ($diff->d > 0) {
+            return $diff->d . ' day' . ($diff->d > 1 ? 's' : '') . ' ago';
+        } elseif ($diff->h > 0) {
+            return $diff->h . ' hour' . ($diff->h > 1 ? 's' : '') . ' ago';
+        } else {
+            return $diff->i . ' minute' . ($diff->i > 1 ? 's' : '') . ' ago';
+        }
+    }
+
+    /**
+     * Fetch inline comments for a pull request.
+     *
+     * @param int $prId
+     * @param int $limit
+     * @return array
+     */
+    private function fetchInlineComments($prId, $limit)
+    {
+        $response = $this->makeRequest(
+            'GET',
+            "/pullrequests/{$prId}/activities?pagelen={$limit}"
+        );
+
+        // Filter activities that are inline comments
+        $inlineComments = [];
+        foreach ($response['values'] ?? [] as $activity) {
+            if (array_get($activity, 'comment.type') === 'pullrequest_comment' &&
+                isset($activity['comment']['inline']) &&
+                !empty(array_get($activity, 'comment.content.raw', ''))) {
+                $inlineComments[] = $activity['comment'];
+            }
+        }
+
+        return $inlineComments;
+    }
+
+    /**
+     * Format an inline comment for display.
+     *
+     * @param array $comment
+     * @param array $activity
+     * @return array
+     */
+    private function formatInlineComment($comment, $activity = null)
+    {
+        return [
+            'author' => array_get($comment, 'user.display_name'),
+            'timestamp' => $this->formatTimestamp(array_get($comment, 'created_on')),
+            'content' => array_get($comment, 'content.raw', ''),
+            'file' => array_get($comment, 'inline.to.src.path'),
+            'line' => array_get($comment, 'inline.to.line'),
+        ];
     }
 }
