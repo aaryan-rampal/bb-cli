@@ -372,8 +372,9 @@ class Pr extends Base
      */
     private function displayComments($prId, $limit, $unresolved)
     {
-        $comments = $this->fetchComments($prId, $limit);
-        $inlineComments = $this->fetchInlineComments($prId, $limit);
+        $commentsData = $this->fetchAllComments($prId);
+        $comments = array_slice($commentsData['general'], 0, $limit);
+        $inlineComments = array_slice($commentsData['inline'], 0, $limit);
 
         // Filter by unresolved status if requested
         if ($unresolved) {
@@ -417,22 +418,33 @@ class Pr extends Base
     }
 
     /**
-     * Fetch comments for a pull request.
+     * Fetch all comments for a pull request and partition into general/inline.
      *
      * @param int $prId
-     * @param int $limit
      * @return array
      */
-    private function fetchComments($prId, $limit)
+    private function fetchAllComments($prId)
     {
         $response = $this->makeRequest(
             'GET',
-            "/pullrequests/{$prId}/comments?pagelen={$limit}"
+            "/pullrequests/{$prId}/comments"
         );
 
-        return array_values(array_filter($response['values'] ?? [], function ($comment) {
-            return empty(array_get($comment, 'inline.path'));
-        }));
+        $general = [];
+        $inline = [];
+
+        foreach ($response['values'] ?? [] as $comment) {
+            if (empty(array_get($comment, 'inline.path'))) {
+                $general[] = $comment;
+            } else {
+                $inline[] = $comment;
+            }
+        }
+
+        return [
+            'general' => $general,
+            'inline' => $inline,
+        ];
     }
 
     /**
@@ -481,33 +493,6 @@ class Pr extends Base
         } else {
             return $diff->i . ' minute' . ($diff->i > 1 ? 's' : '') . ' ago';
         }
-    }
-
-    /**
-     * Fetch inline comments for a pull request.
-     *
-     * @param int $prId
-     * @param int $limit
-     * @return array
-     */
-    private function fetchInlineComments($prId, $limit)
-    {
-        $response = $this->makeRequest(
-            'GET',
-            "/pullrequests/{$prId}/comments?pagelen={$limit}"
-        );
-
-        // Filter comments that are inline comments
-        $inlineComments = [];
-        foreach ($response['values'] ?? [] as $comment) {
-            if (array_get($comment, 'type') === 'pullrequest_comment' &&
-                !empty(array_get($comment, 'inline.path')) &&
-                !empty(array_get($comment, 'content.raw', ''))) {
-                $inlineComments[] = $comment;
-            }
-        }
-
-        return $inlineComments;
     }
 
     /**
