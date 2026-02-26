@@ -484,10 +484,16 @@ class Pr extends Base
         $now = new \DateTime();
         $diff = $now->diff($date);
 
-        if ($diff->d > 7) {
+        // Handle future timestamps
+        if ($diff->invert === 1) {
             return $date->format('M d, Y');
-        } elseif ($diff->d > 0) {
-            return $diff->d . ' day' . ($diff->d > 1 ? 's' : '') . ' ago';
+        }
+
+        // Use total days instead of day component
+        if ($diff->days > 7) {
+            return $date->format('M d, Y');
+        } elseif ($diff->days > 0) {
+            return $diff->days . ' day' . ($diff->days > 1 ? 's' : '') . ' ago';
         } elseif ($diff->h > 0) {
             return $diff->h . ' hour' . ($diff->h > 1 ? 's' : '') . ' ago';
         } else {
