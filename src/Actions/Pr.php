@@ -396,7 +396,11 @@ class Pr extends Base
         } else {
             foreach ($comments as $comment) {
                 $formatted = $this->formatGeneralComment($comment);
-                o("{$formatted['author']} ({$formatted['timestamp']}):", 'green');
+                $timestampLine = $formatted['author'] . " ({$formatted['timestamp']})";
+                if (!empty($formatted['commitSha'])) {
+                    $timestampLine .= " - commit: {$formatted['commitSha']}";
+                }
+                o($timestampLine, 'green');
                 o($formatted['content']);
                 o('');
             }
@@ -410,7 +414,11 @@ class Pr extends Base
             foreach ($inlineComments as $comment) {
                 $formatted = $this->formatInlineComment($comment);
                 o("File: {$formatted['file']}:{$formatted['line']}", 'cyan');
-                o("{$formatted['author']} ({$formatted['timestamp']}):", 'green');
+                $timestampLine = $formatted['author'] . " ({$formatted['timestamp']})";
+                if (!empty($formatted['commitSha'])) {
+                    $timestampLine .= " - commit: {$formatted['commitSha']}";
+                }
+                o($timestampLine, 'green');
                 o($formatted['content']);
                 o('');
             }
@@ -461,6 +469,7 @@ class Pr extends Base
                 'timestamp' => $this->formatTimestamp(array_get($comment, 'created_on')),
                 'content' => '[DELETED]',
                 'uuid' => array_get($comment, 'user.uuid'),
+                'commitSha' => $this->extractCommitHash($comment),
             ];
         }
 
@@ -469,6 +478,7 @@ class Pr extends Base
             'timestamp' => $this->formatTimestamp(array_get($comment, 'created_on')),
             'content' => array_get($comment, 'content.raw', ''),
             'uuid' => array_get($comment, 'user.uuid'),
+            'commitSha' => $this->extractCommitHash($comment),
         ];
     }
 
@@ -502,6 +512,36 @@ class Pr extends Base
     }
 
     /**
+     * Extract commit hash from comment object.
+     *
+     * Checks multiple possible field names handling API variations.
+     *
+     * @param array $comment
+     * @return string|null
+     */
+    private function extractCommitHash($comment)
+    {
+        // Try most common locations first
+        $fields = [
+            'inline.to.hash',
+            'inline.to_sha',
+            'inline.from.hash',
+            'inline.from_sha',
+            'hash',
+            'commit.hash',
+        ];
+
+        foreach ($fields as $field) {
+            $hash = array_get($comment, $field);
+            if (!empty($hash)) {
+                return substr($hash, 0, 7);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Format an inline comment for display.
      *
      * @param array $comment
@@ -520,6 +560,7 @@ class Pr extends Base
             'content' => array_get($comment, 'content.raw', ''),
             'file' => array_get($comment, 'inline.path', ''),
             'line' => $line,
+            'commitSha' => $this->extractCommitHash($comment),
         ];
     }
 }
