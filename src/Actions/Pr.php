@@ -529,6 +529,8 @@ class Pr extends Base
             'inline.from_sha',
             'hash',
             'commit.hash',
+            'commit_id',
+            'inline.commitId',
         ];
 
         foreach ($fields as $field) {
